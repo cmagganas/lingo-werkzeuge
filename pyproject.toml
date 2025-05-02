@@ -1,0 +1,25 @@
+[project]
+name = "lingo-werkzeuge"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Christos Magganas", email = "cmagganas@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "arcade-ai>=1.4.3",
+    "arcadepy>=1.4.0",
+    "flask>=3.1.0",
+    "pydantic>=2.11.4",
+    "python-dotenv>=1.1.0",
+    "requests>=2.32.3",
+    "vapi-python>=0.1.9",
+]
+
+[project.scripts]
+lingo-werkzeuge = "lingo_werkzeuge:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
