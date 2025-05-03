@@ -1,153 +1,145 @@
-# Lingo Werkzeuge
+# Lingo-Werkzeuge: Voice-Controlled Calendar Assistant for Language Learning
 
-An interactive AI-powered language learning assistant demo app, showcasing integration with sponsor SDKs and best practices for project setup.
+This project connects two AI agents using the Model Context Protocol (MCP):
+- **Vapi Agent**: Provides speech-to-text and text-to-speech capabilities
+- **Arcade Agent**: Provides Google Calendar integration
 
-## Features
+## Setup
 
-- 🗣️ **Interactive Language Learning** - Practice conversations with an AI tutor
-- 🌍 **Multiple Language Support** - Learn Spanish, French, and many other languages
-- 🎙️ **Natural Voice Synthesis** - Lifelike speech using Rime AI voices
-- 📚 **Vocabulary Management** - Save and review words you learn
-- 🧠 **Intelligent Tutoring** - AI adapts to your learning needs
+1. Make sure you have the required API keys:
+   ```bash
+   export VAPI_API_KEY=your_vapi_api_key
+   export ARCADE_API_KEY=your_arcade_api_key
+   export ARCADE_USER_ID=your_arcade_user_id
+   ```
 
-## Architecture
+2. Install dependencies:
+   ```bash
+   pip install "mcp[cli]" python-dotenv pyyaml vapi-python
+   ```
 
-Project file structure:
+## Running the System
 
-```bash
-├── pyproject.toml         # Project metadata and dependencies
-├── README.md              # This file
-├── .env                   # Environment variables and API keys
-├── src/                   # Source code directory
-│   ├── lingo_werkzeuge/   # Main package code
-│   │   ├── __init__.py    # Package initialization
-│   │   ├── convolingo/    # Language learning application
-│   │   │   ├── __init__.py
-│   │   │   ├── __main__.py
-│   │   │   ├── api/       # API clients and server
-│   │   │   ├── cli/       # Command-line interface
-│   │   │   ├── tools/     # Language learning tools
-│   │   │   └── utils/     # Utility functions
-│   │   └── vapi/          # Vapi integration module
-│   │       ├── __init__.py
-│   │       ├── cli.py     # Command-line interface for testing
-│   │       └── test.py    # Testing utilities for Vapi+Rime AI
-│   ├── vapi/              # Direct-access test utilities
-│   │   ├── __init__.py
-│   │   └── test.py
-│   └── vapi_test_cmd.py   # Command-line script for testing
-├── docs                   # Documentation
-├── hackathon              # Hackathon-specific information
-└── sponsors               # Sponsor SDK documentation
-```
+**Option 1: Voice-Enabled Assistant (Recommended)**
 
-## Installation
+The most complete solution with real voice capabilities:
 
 ```bash
-# Clone the repository
-git clone https://github.com/cmagganas/lingo-werkzeuge.git
-cd lingo-werkzeuge
-
-# Create and activate a virtual environment
-uv venv .venv
-source .venv/bin/activate
-
-# Install dependencies
-uv add vapi_python flask python-dotenv requests pydantic
+cd /Users/christos/cmagganas/mcp-a2a-hackathon/lingo-werkzeuge
+python3 src/orchestrator/direct_mcp_connect.py --start-servers --voice-input
 ```
 
-## Environment Variables
+Command line options:
+- `--start-servers`: Start the MCP servers automatically
+- `--voice-input`: Enable listening through the microphone
+- `--voice [name]`: Choose a voice (default: samantha)
+- `--debug`: Show more detailed logs
+- `--test-mode`: Run in test mode with simulated input
 
-Create a `.env` file with your API keys:
+For detailed setup instructions, see [VOICE_SETUP.md](VOICE_SETUP.md).
+
+**Option 2: Start the MCP Servers (separately)**
+
+You need to run two servers in separate terminals:
+
+### Terminal 1: Start the Vapi Agent Server
 
 ```bash
-# Vapi API credentials
-VAPI_API_KEY=your_vapi_api_key_here
-
-# Voice configuration (using Rime AI)
-VAPI_VOICE_PROVIDER=rime-ai
-VAPI_VOICE_ID=samantha  # Options: samantha, elena, maya, ally, nicholas, tyler
-
-# Other API keys
-OPENAI_API_KEY=your_openai_api_key_here
-ARCADE_API_KEY=your_arcade_api_key_here
+cd /Users/christos/cmagganas/mcp-a2a-hackathon/lingo-werkzeuge
+python3 src/agents/vapi_agent/server.py
 ```
 
-## Usage
-
-### Testing Vapi with Rime AI Voices
-
-You can test the Vapi integration with Rime AI voices using one of the following commands:
+### Terminal 2: Start the Arcade Agent Server
 
 ```bash
-# List available Rime AI voices
-python -m lingo_werkzeuge.vapi.cli --list-voices
-
-# Test with the default voice (samantha)
-python -m lingo_werkzeuge.vapi.cli
-
-# Test with a specific voice
-python -m lingo_werkzeuge.vapi.cli --voice elena
-
-# Test with a custom message and longer wait time
-python -m lingo_werkzeuge.vapi.cli --voice nicholas --message "Tell me about language learning" --wait 15
+cd /Users/christos/cmagganas/mcp-a2a-hackathon/lingo-werkzeuge
+python3 src/agents/arcade_agent/server.py
 ```
 
-### Running the Language Learning Application
+### Terminal 3: Run the Connection Test
 
-The full language learning application can be run with:
+For a quick test that both agents are working correctly:
 
 ```bash
-# Start the main application
-python -m lingo_werkzeuge
-
-# Start with a specific language
-python -m lingo_werkzeuge --language French
-
-# Start with debug logging
-python -m lingo_werkzeuge --debug
+cd /Users/christos/cmagganas/mcp-a2a-hackathon/lingo-werkzeuge
+python3 src/orchestrator/connect_to_agents.py --test-mode
 ```
 
-## Available Rime AI Voices
+**Option 3: Use the Simple Interactive Demo**
 
-The application supports multiple Rime AI voices:
+Skip the MCP complexity and run our interactive demo:
 
-- `samantha` - Female, clear and professional (default)
-- `elena` - Female, warm and friendly
-- `nicholas` - Male, authoritative and clear
-- `tyler` - Male, conversational and friendly
-- `maya` - Female, younger sounding voice
-- `ally` - Female, energetic and upbeat
+```bash
+cd /Users/christos/cmagganas/mcp-a2a-hackathon/lingo-werkzeuge
+python3 demo.py
+```
 
-## Project Structure Overview
+This will let you simulate voice commands by typing them, demonstrating how the system is designed to work.
 
-### Main Components
+## Using the Real System
 
-1. **ConvoLingo** - The core language learning application
-   - Interactive CLI for language practice
-   - Vocabulary management tools
-   - Webhook server for API integrations
+Once all components are running:
 
-2. **Vapi Integration** - Voice synthesis using Vapi and Rime AI
-   - Testing utilities and CLI for Vapi
-   - Voice selection and configuration
-   - Speech synthesis with natural-sounding voices
+1. You will hear a welcome message from the voice assistant
+2. Speak into your microphone with commands like:
+   - "Schedule a language learning session tomorrow at 3 PM"
+   - "Create a meeting with my Spanish tutor next Monday at 10 AM" 
+   - "Add a language study appointment for Friday at 2 PM"
+3. The system will confirm the details and create the event in your calendar
+4. To exit, say "goodbye" or "exit"
 
-## Contributing
+## Voice Capability
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+To use real voice capabilities with the improved implementation:
+1. Make sure `VAPI_API_KEY` is set in your environment (use the public key)
+2. Use the `direct_mcp_connect.py` script with both `--start-servers` and `--voice-input` options
+3. Speak clearly into your microphone when prompted
+4. If you encounter any issues, check the [VOICE_SETUP.md](VOICE_SETUP.md) troubleshooting guide
 
-## License
+## Known Issues and Solutions
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+1. **Connection issues with chat_bridge.py**: 
+   - The original implementation has issues connecting to running MCP servers
+   - Use the `direct_mcp_connect.py` script instead, which uses the Vapi SDK directly
 
-## Acknowledgments
+2. **Config file errors**: 
+   - Make sure `src/common/mcp_config.yaml` exists and has the correct Python path
+   
+3. **Python path errors**:
+   - Always use `python3` instead of `python` for all commands
 
-- [Vapi](https://vapi.ai) - For their voice conversation API
-- [Rime AI](https://docs.vapi.ai/providers/voice/rimeai) - For their natural-sounding voices
-- [Arcade](https://arcade.software) - For their AI SDK
-- Other sponsors of the MCP hackathon
+4. **API key errors**:
+   - Make sure your `VAPI_API_KEY` is correctly set and is the public key for Vapi
+   - Double-check all environment variables are properly exported before running
+
+## What We've Built
+
+1. **MCP Servers**:
+   - Vapi Agent for voice capabilities
+   - Arcade Agent for Google Calendar integration
+   
+2. **Tools**:
+   - **Vapi Tools**:
+     - `say_tool`: Text-to-speech using Rime AI voices
+     - `listen_tool`: Speech-to-text capabilities
+     - `list_voices_tool`: Lists available Rime AI voices
+   
+   - **Arcade Tools**:
+     - `create_event_tool`: Creates calendar events
+
+3. **Integration Solutions**:
+   - Multiple ways to run the system:
+     - `direct_mcp_connect.py`: Direct integration with Vapi SDK for real voice support
+     - `connect_to_agents.py`: Tests MCP servers via HTTP calls
+     - `demo.py`: Simple simulation of the system
+   
+4. **Demo Application**:
+   - Interactive demonstration of the system capabilities
+
+## Troubleshooting
+
+- If you see connection errors, make sure all servers are running and your API keys are set correctly
+- Check the logs at WARNING level for errors
+- If the logs are too verbose, modify the logging level in the Python files
+- Make sure you're using python3 (not python) for all commands
+- Verify that the `src/common/mcp_config.yaml` file exists and has the correct contents

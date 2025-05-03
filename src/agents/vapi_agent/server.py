@@ -1,19 +1,26 @@
+#!/usr/bin/env python3
 """
 MCP server for Vapi agent, providing text-to-speech and speech-to-text capabilities.
 """
 import os
+import sys
 import asyncio
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, Optional, List, Sequence
 from dotenv import load_dotenv
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
-from mcp.types import Tool
+from mcp.types import Tool, TextContent
+
+# Add the src directory to the Python path to enable relative imports
+current_dir = os.path.dirname(os.path.abspath(__file__))
+src_dir = os.path.dirname(os.path.dirname(os.path.dirname(current_dir)))
+sys.path.insert(0, src_dir)
 
 # Import the tool implementations
-from .tools.say import say
-from .tools.listen import listen
-from .tools.list_voices import list_voices
+from src.agents.vapi_agent.tools.say import say
+from src.agents.vapi_agent.tools.listen import listen
+from src.agents.vapi_agent.tools.list_voices import list_voices
 
 # Load environment variables
 load_dotenv()
@@ -27,61 +34,61 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Define MCP tools
-SAY_TOOL = Tool(
-    name="say",
-    description="Convert text to speech using Vapi with Rime AI voices",
-    inputSchema={
-        "type": "object",
-        "properties": {
-            "text": {
-                "type": "string",
-                "description": "The text to convert to speech"
+TOOLS = [
+    Tool(
+        name="say_tool",
+        description="Convert text to speech using Vapi with Rime AI voices",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "text": {
+                    "type": "string",
+                    "description": "The text to convert to speech"
+                },
+                "voice_id": {
+                    "type": "string",
+                    "description": "The Rime AI voice ID to use (default: samantha)"
+                },
+                "wait_for_completion": {
+                    "type": "boolean",
+                    "description": "Whether to wait for the speech to complete (default: true)"
+                },
+                "wait_time": {
+                    "type": "integer",
+                    "description": "Time to wait for response in seconds if wait_for_completion is true (default: 10)"
+                }
             },
-            "voice_id": {
-                "type": "string",
-                "description": "The Rime AI voice ID to use (default: samantha)"
-            },
-            "wait_for_completion": {
-                "type": "boolean",
-                "description": "Whether to wait for the speech to complete (default: true)"
-            },
-            "wait_time": {
-                "type": "integer",
-                "description": "Time to wait for response in seconds if wait_for_completion is true (default: 10)"
-            }
-        },
-        "required": ["text"]
-    }
-)
-
-LISTEN_TOOL = Tool(
-    name="listen",
-    description="Listen for speech and convert to text using Vapi",
-    inputSchema={
-        "type": "object",
-        "properties": {
-            "max_listen_time": {
-                "type": "integer",
-                "description": "Maximum time to listen in seconds (default: 30)"
-            },
-            "language": {
-                "type": "string",
-                "description": "Language code for speech recognition (default: en-US)"
+            "required": ["text"]
+        }
+    ),
+    Tool(
+        name="listen_tool",
+        description="Listen for speech and convert to text using Vapi",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "max_listen_time": {
+                    "type": "integer",
+                    "description": "Maximum time to listen in seconds (default: 30)"
+                },
+                "language": {
+                    "type": "string",
+                    "description": "Language code for speech recognition (default: en-US)"
+                }
             }
         }
-    }
-)
+    ),
+    Tool(
+        name="list_voices_tool",
+        description="List available Rime AI voices for use with Vapi",
+        inputSchema={
+            "type": "object",
+            "properties": {}
+        }
+    )
+]
 
-LIST_VOICES_TOOL = Tool(
-    name="list_voices",
-    description="List available Rime AI voices for use with Vapi",
-    inputSchema={
-        "type": "object",
-        "properties": {}
-    }
-)
-
-async def serve() -> None:
+async def main():
     """Start the MCP server for the Vapi agent."""
     logger.info("Starting Vapi Agent MCP Server")
     
@@ -96,25 +103,35 @@ async def serve() -> None:
     @server.list_tools()
     async def list_tools() -> List[Tool]:
         """Register all available tools with the MCP server."""
-        return [SAY_TOOL, LISTEN_TOOL, LIST_VOICES_TOOL]
+        return TOOLS
     
-    @server.call_tool("say")
-    async def call_say(parameters: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle calls to the 'say' tool."""
-        logger.info(f"Received call to 'say' tool with parameters: {parameters}")
-        return say(parameters)
-    
-    @server.call_tool("listen")
-    async def call_listen(parameters: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle calls to the 'listen' tool."""
-        logger.info(f"Received call to 'listen' tool with parameters: {parameters}")
-        return listen(parameters)
-    
-    @server.call_tool("list_voices")
-    async def call_list_voices(parameters: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle calls to the 'list_voices' tool."""
-        logger.info(f"Received call to 'list_voices' tool with parameters: {parameters}")
-        return list_voices(parameters)
+    @server.call_tool()
+    async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
+        """
+        Handle calls to tools.
+        
+        Args:
+            name: The name of the tool to call
+            arguments: The arguments to pass to the tool
+            
+        Returns:
+            The result of the tool execution
+        """
+        logger.info(f"Received call to '{name}' with arguments: {arguments}")
+        
+        result = None
+        if name == "say_tool":
+            result = say(arguments)
+        elif name == "listen_tool":
+            result = listen(arguments)
+        elif name == "list_voices_tool":
+            result = list_voices(arguments)
+        else:
+            logger.error(f"Unknown tool: {name}")
+            return [TextContent(f"Error: Unknown tool '{name}'")]
+        
+        # Convert the result to a text content
+        return [TextContent(str(result))]
     
     # Initialize and run the server
     try:
@@ -131,4 +148,4 @@ async def serve() -> None:
 
 if __name__ == "__main__":
     # Run the server
-    asyncio.run(serve()) 
+    asyncio.run(main()) 

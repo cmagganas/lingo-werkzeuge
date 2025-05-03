@@ -1,6 +1,74 @@
-# Orchestrator for MCP Agents
+# Voice-Controlled Calendar Assistant
 
-This directory contains the orchestrator components that bridge multiple MCP agents together.
+This is a voice-controlled assistant that allows scheduling events in your calendar using natural language commands. It bridges Vapi (a speech-to-text and text-to-speech service) with Arcade (Google Calendar integration).
+
+## Setup
+
+1. Make sure you have the required API keys:
+   ```bash
+   export VAPI_API_KEY=your_vapi_api_key
+   export ARCADE_API_KEY=your_arcade_api_key
+   export ARCADE_USER_ID=your_arcade_user_id
+   ```
+
+2. Install dependencies:
+   ```bash
+   pip install "mcp[cli]" python-dotenv pyyaml
+   ```
+
+## Running the System
+
+You need to run three different components in separate terminals:
+
+### Terminal 1: Start the Vapi Agent Server
+
+```bash
+cd /Users/christos/cmagganas/mcp-a2a-hackathon/lingo-werkzeuge
+python3 src/agents/vapi_agent/server.py
+```
+
+### Terminal 2: Start the Arcade Agent Server
+
+```bash
+cd /Users/christos/cmagganas/mcp-a2a-hackathon/lingo-werkzeuge
+python3 src/agents/arcade_agent/server.py
+```
+
+### Terminal 3: Start the Chat Bridge
+
+```bash
+cd /Users/christos/cmagganas/mcp-a2a-hackathon/lingo-werkzeuge
+python3 src/orchestrator/chat_bridge.py
+```
+
+## Using the System
+
+Once all three components are running:
+
+1. You will hear a welcome message from the voice assistant
+2. Speak into your microphone with commands like:
+   - "Schedule a language learning session tomorrow at 3 PM"
+   - "Create a meeting with John next Monday at 10 AM"
+   - "Add a doctor's appointment for Friday at 2 PM"
+3. The system will confirm the details and create the event in your calendar
+4. To exit, say "goodbye" or "exit"
+
+## Test Mode
+
+If you want to test without using a real microphone:
+```bash
+python3 src/orchestrator/chat_bridge.py --test-mode
+```
+
+This will simulate voice input for testing purposes.
+
+## Troubleshooting
+
+- If you see connection errors, make sure all three servers are running and your API keys are set correctly
+- Check the logs at WARNING level for errors
+- If the logs are too verbose, you can modify the logging level in chat_bridge.py
+- Make sure you're using python3 (not python) for all commands
+- Verify that the `src/common/mcp_config.yaml` file exists and has the correct contents
 
 ## Chat Bridge
 
@@ -18,19 +86,19 @@ The `chat_bridge.py` script connects the Vapi agent (speech) and Arcade agent (G
 Run the chat bridge with the default voice:
 
 ```bash
-python lingo-werkzeuge/src/orchestrator/chat_bridge.py
+python3 src/orchestrator/chat_bridge.py
 ```
 
 Specify a different voice:
 
 ```bash
-python lingo-werkzeuge/src/orchestrator/chat_bridge.py --voice elena
+python3 src/orchestrator/chat_bridge.py --voice elena
 ```
 
 Run in test mode to simulate user input:
 
 ```bash
-python lingo-werkzeuge/src/orchestrator/chat_bridge.py --test-mode
+python3 src/orchestrator/chat_bridge.py --test-mode
 ```
 
 ### Voice Commands
@@ -54,6 +122,7 @@ The chat bridge acts as a mediator between the two MCP agents:
 
 - mcp
 - python-dotenv
+- pyyaml
 - datetime, re (built-in)
 
 ### Future Improvements

@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "vapi-agent": {
+      "command": "python",
+      "args": ["src/agents/vapi_agent/server.py"],
+      "env": {
+        "VAPI_API_KEY": "${VAPI_API_KEY}"
+      }
+    },
+    "arcade-agent": {
+      "command": "python",
+      "args": ["src/agents/arcade_agent/server.py"],
+      "env": {
+        "ARCADE_API_KEY": "${ARCADE_API_KEY}",
+        "ARCADE_USER_ID": "${ARCADE_USER_ID}"
+      }
+    }
+  }
+} 

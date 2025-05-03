@@ -10,25 +10,98 @@ import re
 import json
 import logging
 import argparse
+import asyncio
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, Tuple
 from dotenv import load_dotenv
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
 
-# Import utility functions
-# Add parent directory to path for imports
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from common.utils import init_mcp_client
+# Add the src directory to the Python path to enable relative imports
+current_dir = os.path.dirname(os.path.abspath(__file__))
+src_dir = os.path.dirname(os.path.dirname(current_dir))
+sys.path.insert(0, src_dir)
 
 # Load environment variables
 load_dotenv()
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.WARNING,
     format='%(asctime)s [%(levelname)s] %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 logger = logging.getLogger(__name__)
+# Reduce noise from MCP library
+logging.getLogger("mcp").setLevel(logging.ERROR)
+
+# Load MCP configuration
+CONFIG_PATH = os.path.join(os.path.dirname(current_dir), "common", "mcp_config.yaml")
+
+async def open_mcp_session(server_conf: dict) -> ClientSession:
+    """
+    Open and initialize an MCP client session.
+    
+    Args:
+        server_conf: The server configuration from mcp_config.yaml
+        
+    Returns:
+        An initialized MCP ClientSession
+    """
+    # Process environment variables in the config
+    env = {}
+    for key, value in server_conf.get("env", {}).items():
+        if isinstance(value, str) and value.startswith("${") and value.endswith("}"):
+            env_var = value[2:-1]
+            env[key] = os.environ.get(env_var, "")
+        else:
+            env[key] = value
+    
+    logger.warning(f"Starting server with command: {server_conf['command']} {' '.join(server_conf.get('args', []))}")
+    
+    # Create server parameters
+    params = StdioServerParameters(
+        command=server_conf["command"],
+        args=server_conf.get("args", []),
+        env=env,
+    )
+    
+    # Create and initialize the client session
+    read_stream, write_stream = await stdio_client(params).__aenter__()
+    session = await ClientSession(read_stream, write_stream).__aenter__()
+    await session.initialize()
+    
+    return session
+
+async def init_mcp_client(agent_name: str) -> ClientSession:
+    """
+    Initialize and return an MCP ClientSession for the given agent_name using mcp_config.yaml.
+    
+    Args:
+        agent_name (str): The name of the agent to initialize (e.g., "vapi-agent")
+        
+    Returns:
+        ClientSession: An initialized MCP client session for the specified agent
+    """
+    try:
+        # Load MCP server configurations
+        import yaml
+        with open(CONFIG_PATH) as f:
+            config = yaml.safe_load(f)
+            
+        server_conf = config.get("mcpServers", {}).get(agent_name)
+        if not server_conf:
+            raise KeyError(f"No MCP server configuration found for agent '{agent_name}'")
+            
+        # Create and return the MCP session
+        return await open_mcp_session(server_conf)
+        
+    except FileNotFoundError:
+        logger.error(f"Config file not found: {CONFIG_PATH}")
+        raise
+    except Exception as e:
+        logger.error(f"Error initializing MCP client: {e}")
+        raise
 
 def extract_event_details(text: str) -> Dict[str, Any]:
     """
@@ -67,7 +140,7 @@ def parse_args():
     parser.add_argument("--test-mode", action="store_true", help="Run in test mode with simulated input")
     return parser.parse_args()
 
-def main():
+async def main_async():
     """Main entry point for the chat bridge."""
     args = parse_args()
     
@@ -75,27 +148,35 @@ def main():
     
     try:
         # Initialize MCP clients
-        vapi_client = init_mcp_client("vapi-agent")
-        arcade_client = init_mcp_client("arcade-agent")
+        logger.warning("Initializing Vapi agent...")
+        vapi_session = await init_mcp_client("vapi-agent")
+        logger.warning("Vapi agent initialized successfully!")
         
-        logger.info("Successfully initialized MCP clients")
+        logger.warning("Initializing Arcade agent...")
+        arcade_session = await init_mcp_client("arcade-agent")
+        logger.warning("Arcade agent initialized successfully!")
+        
+        logger.info("Successfully initialized MCP client sessions")
         
         # Check available voices
-        voices_result = vapi_client.execute("list_voices", {})
-        if not voices_result.get("success", False):
-            logger.warning(f"Failed to list voices: {voices_result.get('message', 'Unknown error')}")
+        voices_result = await vapi_session.call_tool("list_voices_tool", {})
+        if not voices_result:
+            logger.warning("Failed to list voices: Unknown error")
         else:
-            logger.info(f"Available voices: {', '.join([v['voice_id'] for v in voices_result.get('voices', [])])}")
+            voices_data = json.loads(str(voices_result.content[0].text))
+            if voices_data.get("voices"):
+                voice_ids = [v.get("voice_id") for v in voices_data.get("voices", [])]
+                logger.info(f"Available voices: {', '.join(voice_ids)}")
         
         # Welcome message
         welcome_message = "Welcome to your voice-controlled calendar assistant. You can say things like 'Schedule a meeting tomorrow at 2 PM'."
-        say_result = vapi_client.execute("say", {
+        say_result = await vapi_session.call_tool("say_tool", {
             "text": welcome_message,
             "voice_id": args.voice
         })
         
-        if not say_result.get("success", False):
-            logger.error(f"Failed to say welcome message: {say_result.get('message', 'Unknown error')}")
+        if not say_result:
+            logger.error("Failed to say welcome message")
             return
         
         # Main interaction loop
@@ -106,46 +187,46 @@ def main():
             if args.test_mode:
                 # Simulate input in test mode
                 logger.info("TEST MODE: Simulating user input")
-                listen_result = {
-                    "success": True,
-                    "text": "Schedule a language learning study session tomorrow at 3 PM"
-                }
+                listen_text = "Schedule a language learning study session tomorrow at 3 PM"
             else:
                 # Real listening
-                listen_result = vapi_client.execute("listen", {
+                listen_result = await vapi_session.call_tool("listen_tool", {
                     "max_listen_time": 30
                 })
-            
-            if not listen_result.get("success", False):
-                error_message = f"Failed to listen: {listen_result.get('message', 'Unknown error')}"
-                logger.error(error_message)
-                vapi_client.execute("say", {
-                    "text": "Sorry, I couldn't hear you. Please try again.",
-                    "voice_id": args.voice
-                })
-                continue
+                
+                if not listen_result:
+                    error_message = "Failed to listen: Unknown error"
+                    logger.error(error_message)
+                    await vapi_session.call_tool("say_tool", {
+                        "text": "Sorry, I couldn't hear you. Please try again.",
+                        "voice_id": args.voice
+                    })
+                    continue
+                
+                # Parse the result text from the response
+                result_data = json.loads(str(listen_result.content[0].text))
+                listen_text = result_data.get("text", "")
             
             # Process the user input
-            user_text = listen_result.get("text", "")
-            logger.info(f"User said: {user_text}")
+            logger.info(f"User said: {listen_text}")
             
             # Check if user wants to exit
-            if any(word in user_text.lower() for word in ["exit", "quit", "stop", "goodbye", "bye"]):
-                vapi_client.execute("say", {
+            if any(word in listen_text.lower() for word in ["exit", "quit", "stop", "goodbye", "bye"]):
+                await vapi_session.call_tool("say_tool", {
                     "text": "Goodbye! Have a great day.",
                     "voice_id": args.voice
                 })
                 break
             
             # Check if the input is about scheduling
-            if any(word in user_text.lower() for word in ["schedule", "create", "add", "set up", "appointment", "meeting", "event"]):
+            if any(word in listen_text.lower() for word in ["schedule", "create", "add", "set up", "appointment", "meeting", "event"]):
                 # Extract event details
-                event_details = extract_event_details(user_text)
+                event_details = extract_event_details(listen_text)
                 
                 # Confirm with the user
                 confirmation_text = f"I'll schedule a {event_details['summary']} from {event_details['start_datetime']} to {event_details['end_datetime']}. Is that correct?"
                 
-                vapi_client.execute("say", {
+                await vapi_session.call_tool("say_tool", {
                     "text": confirmation_text,
                     "voice_id": args.voice
                 })
@@ -155,19 +236,22 @@ def main():
                 
                 # Create the event
                 logger.info(f"Creating event with details: {event_details}")
-                event_result = arcade_client.execute("create_event", event_details)
+                event_result = await arcade_session.call_tool("create_event_tool", event_details)
                 
-                if not event_result.get("success", False):
-                    error_message = f"Failed to create event: {event_result.get('message', 'Unknown error')}"
+                if not event_result:
+                    error_message = "Failed to create event: Unknown error"
                     logger.error(error_message)
-                    vapi_client.execute("say", {
+                    await vapi_session.call_tool("say_tool", {
                         "text": f"Sorry, I couldn't create the event. {error_message}",
                         "voice_id": args.voice
                     })
                 else:
+                    result_data = json.loads(str(event_result.content[0].text))
+                    event_id = result_data.get("event_id", "unknown ID")
+                    
                     success_message = f"Great! I've scheduled your {event_details['summary']}."
-                    logger.info(f"Event created successfully: {event_result.get('event_id', 'unknown ID')}")
-                    vapi_client.execute("say", {
+                    logger.info(f"Event created successfully: {event_id}")
+                    await vapi_session.call_tool("say_tool", {
                         "text": success_message,
                         "voice_id": args.voice
                     })
@@ -178,7 +262,7 @@ def main():
                     break
             else:
                 # Handle other types of input
-                vapi_client.execute("say", {
+                await vapi_session.call_tool("say_tool", {
                     "text": "I'm not sure how to help with that. I can schedule events for you. Try saying 'Schedule a meeting tomorrow at 2 PM'.",
                     "voice_id": args.voice
                 })
@@ -191,4 +275,4 @@ def main():
         logger.info("Chat bridge shutting down")
 
 if __name__ == "__main__":
-    main() 
+    asyncio.run(main_async()) 

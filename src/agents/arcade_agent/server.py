@@ -1,17 +1,24 @@
+#!/usr/bin/env python3
 """
 MCP server for Arcade agent, providing access to Google Workspace tools like Calendar.
 """
 import os
+import sys
 import asyncio
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, Optional, List
 from dotenv import load_dotenv
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
-from mcp.types import Tool
+from mcp.types import Tool, TextContent
+
+# Add the src directory to the Python path to enable relative imports
+current_dir = os.path.dirname(os.path.abspath(__file__))
+src_dir = os.path.dirname(os.path.dirname(os.path.dirname(current_dir)))
+sys.path.insert(0, src_dir)
 
 # Import the tool implementations
-from .tools.create_event import create_event
+from src.agents.arcade_agent.tools.create_event import create_event
 
 # Load environment variables
 load_dotenv()
@@ -26,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 # Define MCP tools
 CREATE_EVENT_TOOL = Tool(
-    name="create_event",
+    name="create_event_tool",
     description="Create a new event/meeting/sync/meetup in the specified calendar using Google Calendar",
     inputSchema={
         "type": "object",
@@ -71,7 +78,7 @@ CREATE_EVENT_TOOL = Tool(
     }
 )
 
-async def serve() -> None:
+async def main():
     """Start the MCP server for the Arcade agent."""
     logger.info("Starting Arcade Agent MCP Server")
     
@@ -93,11 +100,29 @@ async def serve() -> None:
         """Register all available tools with the MCP server."""
         return [CREATE_EVENT_TOOL]
     
-    @server.call_tool("create_event")
-    async def call_create_event(parameters: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle calls to the 'create_event' tool."""
-        logger.info(f"Received call to 'create_event' tool with parameters: {parameters}")
-        return create_event(parameters)
+    @server.call_tool()
+    async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
+        """
+        Handle calls to tools.
+        
+        Args:
+            name: The name of the tool to call
+            arguments: The arguments to pass to the tool
+            
+        Returns:
+            The result of the tool execution
+        """
+        logger.info(f"Received call to '{name}' with parameters: {arguments}")
+        
+        result = None
+        if name == "create_event_tool":
+            result = create_event(arguments)
+        else:
+            logger.error(f"Unknown tool: {name}")
+            return [TextContent(f"Error: Unknown tool '{name}'")]
+        
+        # Convert the result to a text content
+        return [TextContent(str(result))]
     
     # Initialize and run the server
     try:
@@ -114,4 +139,4 @@ async def serve() -> None:
 
 if __name__ == "__main__":
     # Run the server
-    asyncio.run(serve()) 
+    asyncio.run(main()) 
